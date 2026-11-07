@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kitchen | Shree Food Court</title>
+<style>
+:root{--b:#a8402a;--p:#fbf3e4;--c:#fff9ee;--i:#2b1a14;--m:#6e5a4e;--l:#e6d5bb}
+@media(prefers-color-scheme:dark){:root{--b:#d9654a;--p:#1d1511;--c:#271c16;--i:#f6e9d6;--m:#bfa890;--l:#3d2d24}}
+*{box-sizing:border-box}body{margin:0;background:var(--p);color:var(--i);font:17px/1.5 system-ui,"Noto Sans Devanagari",sans-serif;padding:12px}
+h1{color:var(--b);margin:4px 0 12px;font-size:24px}h3{margin:22px 0 8px;color:var(--m)}
+button{font:inherit;cursor:pointer;min-height:46px;padding:0 16px;border-radius:999px;border:2px solid var(--b);background:var(--b);color:#fff8ec;font-weight:700}
+button.o{background:transparent;color:var(--b)}button.r{background:transparent;color:#c0392b;border-color:#c0392b}
+.o1{background:var(--c);border:1px solid var(--l);border-left:8px solid var(--b);border-radius:12px;padding:14px;margin-bottom:12px}
+.o1.cooking{border-left-color:#e6a100}.o1.ready{border-left-color:#2e7d3e}.o1.old{opacity:.6;border-left-color:var(--l)}
+.t{font-size:22px;font-weight:800}.bt{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.tag{font-size:13px;font-weight:700;text-transform:uppercase;color:var(--m);margin-left:8px}
+#msg{color:#c0392b}
+</style></head><body>
+<h1>Kitchen orders</h1>
+<div id="lg"><button id="in">Google se login</button><p id="msg"></p></div>
+<div id="app" style="display:none"><button class="o" id="snd">Sound test</button> <button class="o" id="out">Logout</button>
+<h3>Active orders</h3><div id="act"></div><h3>Recent (done / cancelled)</h3><div id="old"></div></div>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {getFirestore,collection,query,orderBy,limit,onSnapshot,doc,updateDoc} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+const app=initializeApp({apiKey:"AIzaSyBtYx-6fekDgiXfZyfuQ7DnA9oZl45vA64",authDomain:"shree-food-court-be6ee.firebaseapp.com",projectId:"shree-food-court-be6ee",storageBucket:"shree-food-court-be6ee.firebasestorage.app",messagingSenderId:"615731534787",appId:"1:615731534787:web:b67bd5962dba2e6ebafb76"});
+const auth=getAuth(app),db=getFirestore(app),$=s=>document.querySelector(s);
+let ctx,unsub,first=true;
+function beep(){try{ctx=ctx||new AudioContext();ctx.resume();[0,.25,.5].forEach(t=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=880;g.gain.value=.3;o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+.15)})}catch(e){}}
+$("#in").onclick=()=>{beep();signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>$("#msg").textContent="Login nahi hua: "+e.code)};
+$("#snd").onclick=beep;
+$("#out").onclick=()=>signOut(auth);
+onAuthStateChanged(auth,u=>{
+if(unsub){unsub();unsub=null}
+if(!u||u.isAnonymous){$("#lg").style.display="block";$("#app").style.display="none";return}
+$("#lg").style.display="none";$("#app").style.display="block";first=true;
+unsub=onSnapshot(query(collection(db,"orders"),orderBy("createdAt","desc"),limit(60)),s=>{
+if(!first&&s.docChanges().some(c=>c.type==="added"&&!s.metadata.hasPendingWrites))beep();first=false;
+let a="",o="";
+s.forEach(d=>{const x=d.data(),id=d.id,live=["new","cooking","ready"].includes(x.status);
+const tm=x.createdAt?x.createdAt.toDate().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"";
+let h='<div class="o1 '+(live?x.status:"old")+'"><span class="t">Table '+esc(x.table)+'</span><span class="tag">'+x.status+' · '+tm+'</span>'+(x.name?'<div>'+esc(x.name)+'</div>':"");
+x.items.forEach(l=>h+="<div><b>"+l.q+" ×</b> "+esc(l.n)+"</div>");
+h+='<div><b>₹'+x.total+'</b></div>';
+if(live){h+='<div class="bt">';
+if(x.status==="new")h+=btn(id,"cooking","Start cooking");
+if(x.status==="cooking")h+=btn(id,"ready","Ready");
+if(x.status==="ready")h+=btn(id,"done","Done");
+h+=btn(id,"cancelled","Cancel","r")+"</div>"}
+h+="</div>";live?a+=h:o+=h});
+$("#act").innerHTML=a||"<p>Koi active order nahi.</p>";$("#old").innerHTML=o||"<p>Kuch nahi.</p>"},
+e=>{$("#lg").style.display="block";$("#app").style.display="none";$("#msg").textContent="Ye Google account allowed nahi hai (rules me OWNER_EMAIL check karo).";signOut(auth)})});
+function btn(id,s,t,c){return '<button class="'+(c||"")+'" data-id="'+id+'" data-s="'+s+'">'+t+'</button>'}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-s]");if(!b)return;
+if(b.dataset.s==="cancelled"&&!confirm("Order cancel karna hai?"))return;
+updateDoc(doc(db,"orders",b.dataset.id),{status:b.dataset.s}).catch(()=>alert("Update nahi hua"))});
+function esc(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+</script></body></html>
